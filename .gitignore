@@ -1,0 +1,5 @@
+﻿_verify/
+node_modules/
+__pycache__/
+*.zip
+*.log

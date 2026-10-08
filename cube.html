@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>作品空间 · 王涛</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  @font-face{font-family:"Microsoft YaHei";src:local("Microsoft YaHei")}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0E1013;color:#F2EFE8;
+    font-family:system-ui,"Microsoft YaHei",sans-serif}
+  canvas{display:block}
+  .tag{position:fixed;left:26px;top:22px;font-size:12.5px;letter-spacing:2px;color:#8C949E;z-index:3}
+  .tag b{color:#F2EFE8;font-weight:600}
+  .hud{position:fixed;right:26px;top:22px;text-align:right;font-size:12.5px;color:#8C949E;line-height:1.9;z-index:3}
+  .hud b{color:#7FC0DE}
+  /* 底部项目条 */
+  .strip{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:14px 22px 18px;
+    justify-content:center;flex-wrap:wrap;z-index:3;
+    background:linear-gradient(180deg,rgba(14,16,19,0),rgba(14,16,19,.86) 55%)}
+  .chip{padding:8px 14px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid rgba(242,239,232,.14);
+    font-size:12.5px;color:#C8CFD6;cursor:pointer;transition:.18s;white-space:nowrap}
+  .chip:hover{background:rgba(127,192,222,.16);transform:translateY(-2px)}
+  .chip.on{background:rgba(127,192,222,.24);border-color:rgba(127,192,222,.7);color:#fff}
+  .chip i{font-style:normal;color:#7C848E;margin-right:7px}
+  /* 大标题（特写视图用） */
+  .focus{position:fixed;left:0;right:0;bottom:96px;text-align:center;pointer-events:none;z-index:2;opacity:0;transition:opacity .5s}
+  .focus.show{opacity:1}
+  .focus h2{font-size:38px;letter-spacing:1px}
+  .focus p{margin-top:10px;font-size:14px;color:#9AA3AD;letter-spacing:1px}
+  .hint{position:fixed;left:26px;bottom:96px;font-size:12px;color:#7C848E;line-height:1.9;z-index:3}
+  .hint b{color:#C8CFD6}
+  .back{position:fixed;right:26px;bottom:96px;font-size:12.5px;color:#8FD0E8;cursor:pointer;z-index:3;display:none}
+  .back.show{display:block}
+  .loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0E1013;
+    font-size:14px;letter-spacing:3px;color:#8C949E;z-index:9}
+</style>
+</head>
+<body>
+<div class="tag">王涛 <b>／作品空间</b></div>
+<div class="hud" id="hud">星座视图<br><b>拖动旋转 · 点墙面进入特写</b></div>
+<div class="hint">滚轮 = 推拉　双击 = 回到立方体<br>点下方项目条 = 直接飞过去</div>
+<div class="back" id="back">← 回到星座视图</div>
+<div class="focus" id="focus"><h2 id="focusT"></h2><p id="focusS"></p></div>
+<div class="strip" id="strip"></div>
+<div class="loading" id="loading">正在生成作品空间…</div>
+
+<script src="three.min.js"></script>
+<script>
+/* =========================================================
+   作品空间 —— 空间立方体 · 墙面作品流（致敬 cactusdigitale.com 的"空间立方体"）
+   尺度玩法：星座视图（站在立方体里看全部） ↔ 特写视图（贴到某一面墙上）
+   ========================================================= */
+const PANELS = [
+  { t: '台 · 巷 · 水', s: '毕业设计 · 楠溪江岩头村老戏台片区有机更新', y: '2026—2027', k: '毕业设计', link: 'demo/index.html', art: 'plan' },
+  { t: '戏台广场 · 交互演示', s: '方正封闭的影剧院式戏台 · 四种天气 · 点构件看做法', y: '2026', k: '空间交互', link: 'demo/index.html', art: 'stage' },
+  { t: '民居院落 · 类型研究', s: '合院 / 天井 / 檐下空间的类型与再利用', y: '2026', k: '研究', link: '', art: 'court' },
+  { t: '水线与巷道', s: '透水视点重建 · 铺装导水 · 巷口框景', y: '2026', k: '设计', link: '', art: 'water' },
+  { t: '图纸与效果图', s: '总平 · 剖透视 · 分时场景', y: '2026', k: '图纸', link: '', art: 'draw' },
+  { t: '关于我', s: '环境设计 · 空间交互 · 待补简历', y: '', k: '联系', link: '', art: 'about' }
+];
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0E1013);
+const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.1, 300);
+camera.position.set(0, 0, 0);
+
+/* ---------- 面板贴图（无图片也能成立的设计稿；以后换成真实作品图即可） ---------- */
+function drawArt(g, kind, w, h) {
+  const ink = '#1F2328', shui = '#2E86AB', tai = '#C0392B', xiang = '#A67C52', green = '#4C8C4A';
+  g.save();
+  g.translate(w * 0.5, h * 0.62);
+  if (kind === 'plan') {
+    g.strokeStyle = ink; g.lineWidth = 4;
+    g.strokeRect(-230, -130, 460, 260);
+    g.fillStyle = 'rgba(46,134,171,.16)';
+    g.fillRect(-230, 10, 460, 40);
+    g.strokeStyle = tai; g.lineWidth = 5;
+    g.strokeRect(-70, -70, 140, 120);
+    g.beginPath(); g.moveTo(-230, 70); g.lineTo(230, 70); g.stroke();
+    g.fillStyle = green; g.fillRect(-200, -110, 90, 40);
+  } else if (kind === 'stage') {
+    g.fillStyle = '#E6DED0'; g.fillRect(-210, -120, 420, 200);
+    g.fillStyle = '#555A61';
+    g.beginPath(); g.moveTo(-250, -120); g.lineTo(0, -205); g.lineTo(250, -120); g.closePath(); g.fill();
+    g.fillStyle = ink; g.fillRect(-90, -60, 180, 100);
+    g.fillStyle = 'rgba(255,201,138,.75)'; g.fillRect(-76, -46, 152, 72);
+    g.strokeStyle = shui; g.lineWidth = 5;
+    for (let i = -3; i <= 3; i++) { g.beginPath(); g.moveTo(i * 60, 80); g.lineTo(i * 60, 10); g.stroke(); }
+  } else if (kind === 'court') {
+    g.strokeStyle = ink; g.lineWidth = 4;
+    g.strokeRect(-220, -140, 440, 60); g.strokeRect(-220, 80, 440, 60);
+    g.strokeRect(-220, -80, 120, 160); g.strokeRect(100, -80, 120, 160);
+    g.fillStyle = 'rgba(166,124,82,.28)'; g.fillRect(-100, -80, 200, 160);
+    g.fillStyle = xiang; g.beginPath(); g.arc(0, 0, 26, 0, Math.PI * 2); g.fill();
+  } else if (kind === 'water') {
+    g.strokeStyle = shui; g.lineWidth = 7;
+    for (let i = 0; i < 4; i++) {
+      g.beginPath();
+      g.moveTo(-260, -90 + i * 60);
+      g.bezierCurveTo(-120, -130 + i * 60, 120, -50 + i * 60, 260, -90 + i * 60);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(46,134,171,.2)'; g.fillRect(-260, -110, 520, 220);
+    g.fillStyle = tai; g.fillRect(120, -20, 24, 24);
+  } else if (kind === 'draw') {
+    g.strokeStyle = ink; g.lineWidth = 3;
+    g.strokeRect(-240, -150, 200, 150); g.strokeRect(40, -150, 200, 150);
+    g.strokeRect(-240, 20, 200, 130); g.strokeRect(40, 20, 200, 130);
+    g.fillStyle = 'rgba(31,35,40,.06)';
+    g.fillRect(-240, -150, 200, 150); g.fillRect(40, 20, 200, 130);
+    g.strokeStyle = tai; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(-40, -160); g.lineTo(-40, 160); g.stroke();
+  } else {
+    g.strokeStyle = ink; g.lineWidth = 4;
+    g.beginPath(); g.arc(0, 0, 96, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = ink; g.beginPath(); g.arc(0, 0, 34, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = shui; g.lineWidth = 4;
+    g.beginPath(); g.moveTo(-220, 120); g.lineTo(220, 120); g.stroke();
+  }
+  g.restore();
+}
+function panelTexture(p, idx) {
+  const W = 1024, H = 640;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#F1EEE7'; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(31,35,40,.05)';
+  for (let i = 0; i < 2600; i++) g.fillRect((i * 137) % W, (i * 71) % H, 2, 2);
+  drawArt(g, p.art, W, H);
+  /* 文字 */
+  g.fillStyle = '#1F2328';
+  g.font = 'bold 34px "Microsoft YaHei",sans-serif';
+  g.fillText('0' + (idx + 1), 64, 84);
+  g.font = 'bold 62px "Microsoft YaHei",sans-serif';
+  g.fillText(p.t, 64, H - 118);
+  g.fillStyle = '#5B6470';
+  g.font = '27px "Microsoft YaHei",sans-serif';
+  g.fillText(p.s.length > 30 ? p.s.slice(0, 30) + '…' : p.s, 64, H - 70);
+  g.fillStyle = '#A67C52';
+  g.font = 'bold 24px "Microsoft YaHei",sans-serif';
+  g.fillText(p.k + (p.y ? '　' + p.y : ''), 64, H - 24);
+  g.strokeStyle = 'rgba(31,35,40,.25)'; g.lineWidth = 3;
+  g.strokeRect(40, 40, W - 80, H - 80);
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/* ---------- 立方体：六面墙贴作品 ---------- */
+const cube = new THREE.Group();
+scene.add(cube);
+const SIZE = 26, HEIGHT = 17;
+const faceGeo = new THREE.PlaneGeometry(SIZE, HEIGHT);
+const walls = [];
+function addWall(tex, pos, rot, index) {
+  const mat = new THREE.MeshBasicMaterial({ map: tex });
+  const m = new THREE.Mesh(faceGeo, mat);
+  m.position.copy(pos);
+  m.rotation.set(rot[0], rot[1], rot[2]);
+  m.userData = { base: pos.clone(), rot: rot.slice(), index: index, tex: tex };
+  cube.add(m);
+  walls.push(m);
+  return m;
+}
+const halfW = SIZE / 2, halfH = HEIGHT / 2;
+/* 四面墙 + 地 + 顶（0-3 是作品，4-5 是氛围面） */
+addWall(panelTexture(PANELS[0], 0), new THREE.Vector3(0, 0, -halfW), [0, 0, 0], 0);            /* 北墙 */
+addWall(panelTexture(PANELS[1], 1), new THREE.Vector3(halfW, 0, 0), [0, -Math.PI / 2, 0], 1);  /* 东墙 */
+addWall(panelTexture(PANELS[2], 2), new THREE.Vector3(0, 0, halfW), [0, Math.PI, 0], 2);       /* 南墙 */
+addWall(panelTexture(PANELS[3], 3), new THREE.Vector3(-halfW, 0, 0), [0, Math.PI / 2, 0], 3);  /* 西墙 */
+addWall(panelTexture(PANELS[4], 4), new THREE.Vector3(0, halfH, 0), [Math.PI / 2, 0, 0], 4);   /* 顶 */
+addWall(panelTexture(PANELS[5], 5), new THREE.Vector3(0, -halfH, 0), [-Math.PI / 2, 0, 0], 5); /* 地 */
+
+/* 房间里的柔光感：淡淡的顶光面片 */
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(SIZE * 1.2, HEIGHT * 1.2),
+  new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.04 }));
+glow.position.set(0, 0, -halfW + 0.06);
+cube.add(glow);
+
+/* ---------- 视角状态 ---------- */
+const state = { yaw: 0, pitch: 0, dist: 0, targetYaw: 0, targetPitch: 0, targetDist: 0, focus: -1, auto: true };
+function applyView() {
+  cube.rotation.y = state.yaw;
+  cube.rotation.x = state.pitch;
+  camera.position.z = -state.dist;   /* 拉远＝退到立方体外面看（星座视图） */
+  camera.position.y = 0;
+  camera.lookAt(0, 0, 0);
+}
+applyView();
+
+/* ---------- 交互：拖动 / 滚轮 / 点击 ---------- */
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let down = false, lx = 0, ly = 0, moved = 0, hovered = -1;
+let lastClickT = 0, lastClickWall = -1;   /* 自己记双击：pointer 事件的 detail 不可靠 */
+
+function pick(cx, cy) {
+  ndc.x = (cx / innerWidth) * 2 - 1;
+  ndc.y = -(cy / innerHeight) * 2 + 1;
+  ray.setFromCamera(ndc, camera);
+  const hit = ray.intersectObjects(walls, false);
+  return hit.length ? hit[0].object : null;
+}
+renderer.domElement.addEventListener('pointerdown', e => { down = true; lx = e.clientX; ly = e.clientY; moved = 0; state.auto = false; });
+addEventListener('pointerup', e => {
+  down = false;
+  if (moved >= 6) return;
+  const now = performance.now();
+  /* 400ms 内的第二次点击（任意位置）= 双击 → 回星座视图。
+     不判断"是不是同一面墙"：飞行动画中同一屏幕点常会落到另一面墙上。 */
+  if (now - lastClickT < 400) {
+    lastClickT = 0;
+    backToConstellation();
+    return;
+  }
+  lastClickT = now;
+  const obj = pick(e.clientX, e.clientY);
+  if (obj) focusPanel(obj.userData.index);
+  else backToConstellation();
+});
+addEventListener('keydown', e => { if (e.key === 'Escape') backToConstellation(); });
+addEventListener('pointermove', e => {
+  if (down) {
+    moved += Math.abs(e.clientX - lx) + Math.abs(e.clientY - ly);
+    state.targetYaw += (e.clientX - lx) * 0.0055;
+    state.targetPitch = Math.max(-0.55, Math.min(0.55, state.targetPitch + (e.clientY - ly) * 0.0035));
+    lx = e.clientX; ly = e.clientY;
+    state.focus = -1;
+  } else {
+    const obj = pick(e.clientX, e.clientY);
+    hovered = obj ? obj.userData.index : -1;
+    renderer.domElement.style.cursor = obj ? 'pointer' : 'grab';
+  }
+});
+renderer.domElement.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.targetDist = Math.max(-9, Math.min(0, state.targetDist - e.deltaY * 0.012));
+  /* 往外滚 = 退回星座视图 */
+  if (state.targetDist < 3.4 && state.focus >= 0) backToConstellation();
+}, { passive: false });
+renderer.domElement.addEventListener('dblclick', backToConstellation);
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ---------- 尺度玩法：星座视图 ↔ 特写视图 ---------- */
+const FOCUS_VIEW = [
+  { yaw: 0, pitch: 0 },                    /* 北墙 */
+  { yaw: -Math.PI / 2, pitch: 0 },         /* 东墙 */
+  { yaw: Math.PI, pitch: 0 },              /* 南墙 */
+  { yaw: Math.PI / 2, pitch: 0 },          /* 西墙 */
+  { yaw: 0, pitch: -Math.PI / 2 },         /* 顶 */
+  { yaw: 0, pitch: Math.PI / 2 }           /* 地 */
+];
+const focusEl = document.getElementById('focus');
+const backEl = document.getElementById('back');
+const hudEl = document.getElementById('hud');
+function focusPanel(i) {
+  state.focus = i;
+  state.targetYaw = FOCUS_VIEW[i].yaw;
+  state.targetPitch = FOCUS_VIEW[i].pitch;
+  state.targetDist = 9.4;                 /* 贴到墙面 */
+  state.auto = false;
+  document.querySelectorAll('.chip').forEach((c, ci) => c.classList.toggle('on', ci === i));
+  document.getElementById('focusT').textContent = PANELS[i].t;
+  document.getElementById('focusS').textContent = PANELS[i].s + (PANELS[i].y ? '　·　' + PANELS[i].y : '');
+  focusEl.classList.add('show');
+  backEl.classList.add('show');
+  hudEl.innerHTML = '特写视图<br><b>' + PANELS[i].k + '</b>　' + (PANELS[i].link ? '双击墙面可进入 · 见下方项目条' : '内容待补');
+}
+function backToConstellation() {
+  state.focus = -1;
+  state.targetYaw = Math.round(state.targetYaw / (Math.PI / 2)) * (Math.PI / 2);
+  state.targetPitch = 0;
+  state.targetDist = 0;
+  state.auto = true;
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+  focusEl.classList.remove('show');
+  backEl.classList.remove('show');
+  hudEl.innerHTML = '星座视图<br><b>拖动旋转 · 点墙面进入特写</b>';
+}
+backEl.addEventListener('click', backToConstellation);
+
+/* 底部项目条 */
+const strip = document.getElementById('strip');
+PANELS.forEach((p, i) => {
+  const b = document.createElement('div');
+  b.className = 'chip';
+  b.innerHTML = '<i>0' + (i + 1) + '</i>' + p.t;
+  b.addEventListener('click', () => {
+    focusPanel(i);
+    if (p.link) { setTimeout(() => { location.href = p.link; }, 900); }
+  });
+  strip.appendChild(b);
+});
+
+/* 自动重排：每隔几秒轻轻换一个姿态（"不停流动的作品流"） */
+let stayTimer = 0, swapTimer = 5.5;
+function rearrange() {
+  /* 把四面墙的贴图轮换一圈——作品在墙上重新排布 */
+  const t0 = walls[0].material.map, t1 = walls[1].material.map;
+  const t2 = walls[2].material.map, t3 = walls[3].material.map;
+  walls[0].material.map = t1; walls[1].material.map = t2;
+  walls[2].material.map = t3; walls[3].material.map = t0;
+  walls.forEach(w => { w.material.needsUpdate = true; });
+  const o = PANELS[0]; PANELS[0] = PANELS[1]; PANELS[1] = PANELS[2]; PANELS[2] = PANELS[3]; PANELS[3] = o;
+  document.querySelectorAll('.chip').forEach((c, i) => {
+    const n = i < 4 ? (i + 1) % 4 : i;
+    c.innerHTML = '<i>0' + (n + 1) + '</i>' + PANELS[i].t;
+  });
+}
+
+/* ---------- 渲染循环 ---------- */
+const clock = new THREE.Clock();
+function tick() {
+  requestAnimationFrame(tick);
+  const dt = Math.min(0.05, clock.getDelta());
+  if (state.auto) state.targetYaw += dt * 0.055;          /* 自己缓慢转，像站在展厅里 */
+  state.yaw += (state.targetYaw - state.yaw) * Math.min(1, dt * 4.5);
+  state.pitch += (state.targetPitch - state.pitch) * Math.min(1, dt * 4.5);
+  state.dist += (state.targetDist - state.dist) * Math.min(1, dt * 3.2);
+  if (state.focus < 0) {
+    swapTimer -= dt;
+    if (swapTimer <= 0) { rearrange(); swapTimer = 6.5; }
+  }
+  /* 悬停微反馈：面板轻微前凸 */
+  walls.forEach(w => {
+    const want = (hovered === w.userData.index) ? 0.55 : 0;
+    w.position.lerpVectors(w.userData.base, w.userData.base.clone().multiplyScalar(0.972), want);
+  });
+  applyView();
+  renderer.render(scene, camera);
+}
+document.getElementById('loading').style.display = 'none';
+/* 对外暴露（便于调试与自动化测试；隔离世界也能读到） */
+window.__site = { state: state, panels: PANELS, walls: walls, cube: cube, camera: camera,
+  focusPanel: focusPanel, backToConstellation: backToConstellation, rearrange: rearrange };
+tick();
+</script>
+</body>
+</html>

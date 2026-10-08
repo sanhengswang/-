@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>台 · 巷 · 水 —— 戏台广场交互演示</title>
+<style>
+  :root{
+    --paper:#F2EFE8; --ink:#12161B; --shui:#7FC0DE; --tai:#E4795F; --xiang:#C9A87C;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0A0D11;color:var(--paper);
+    font-family:system-ui,"Microsoft YaHei",sans-serif}
+  #app{position:fixed;inset:0}
+  canvas{display:block}
+
+  /* 左上：项目信息 */
+  .panel{position:fixed;left:22px;top:20px;max-width:330px;padding:16px 18px;border-radius:14px;
+    background:rgba(12,16,21,.62);backdrop-filter:blur(10px);border:1px solid rgba(242,239,232,.14)}
+  .panel h1{font-size:19px;letter-spacing:1px;font-weight:800}
+  .panel h1 span{color:var(--shui)}
+  .panel .sub{font-size:12.5px;color:#9AA3AD;margin-top:6px;line-height:1.7}
+  .panel .data{margin-top:12px;font-size:12px;color:#C8CFD6;line-height:1.9;border-top:1px dashed rgba(242,239,232,.16);padding-top:10px}
+  .panel .data b{color:var(--xiang);font-weight:600}
+
+  /* 底部：天气控制 */
+  .weather{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:10px;
+    padding:10px 12px;border-radius:18px;background:rgba(12,16,21,.66);backdrop-filter:blur(10px);
+    border:1px solid rgba(242,239,232,.14);box-shadow:0 18px 40px rgba(0,0,0,.45)}
+  .wbtn{display:flex;flex-direction:column;align-items:center;gap:4px;width:78px;padding:10px 6px;border-radius:13px;
+    background:rgba(255,255,255,.05);border:1px solid transparent;color:#DADFE4;cursor:pointer;
+    transition:transform .15s,background .2s,border-color .2s;font-size:12.5px}
+  .wbtn .ico{font-size:24px;line-height:1}
+  .wbtn:hover{transform:translateY(-3px);background:rgba(127,192,222,.14)}
+  .wbtn.on{background:rgba(127,192,222,.22);border-color:rgba(127,192,222,.75);color:#fff;box-shadow:0 0 22px rgba(127,192,222,.35)}
+
+  /* 右侧：开关与提示 */
+  .side{position:fixed;right:22px;top:20px;display:flex;flex-direction:column;gap:9px;align-items:flex-end}
+  .sw{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:12px;font-size:12.5px;cursor:pointer;
+    background:rgba(12,16,21,.62);backdrop-filter:blur(10px);border:1px solid rgba(242,239,232,.14);color:#DADFE4}
+  .sw i{width:34px;height:19px;border-radius:12px;background:#3A424B;position:relative;transition:.2s;display:inline-block}
+  .sw i::after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff;transition:.2s}
+  .sw.on i{background:var(--shui)}
+  .sw.on i::after{left:17px}
+
+  /* 底部提示 */
+  .hint{position:fixed;right:22px;bottom:28px;font-size:12px;color:#8C949E;text-align:right;line-height:1.8}
+  .state{position:fixed;left:22px;bottom:28px;font-size:12.5px;color:#9AA3AD;line-height:1.8;max-width:320px}
+  .state b{color:var(--shui)}
+
+  /* 日照滑杆 */
+  .sunbar{position:fixed;left:22px;bottom:86px;width:330px;padding:12px 16px 14px;border-radius:14px;
+    background:rgba(12,16,21,.66);backdrop-filter:blur(10px);border:1px solid rgba(242,239,232,.14)}
+  .sunbar .row{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:#C8CFD6}
+  .sunbar .row b{color:#FFD98A;font-size:15px;font-weight:700}
+  .sunbar input[type=range]{width:100%;margin-top:9px;-webkit-appearance:none;height:5px;border-radius:3px;
+    background:linear-gradient(90deg,#2C3E5A,#E0A06A 22%,#8FD0E8 50%,#E0A06A 78%,#2C3E5A);outline:none}
+  .sunbar input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;
+    background:#FFE9B8;border:2px solid #8C6A2E;cursor:pointer;box-shadow:0 0 10px rgba(255,220,140,.6)}
+  .sunbar .marks{display:flex;justify-content:space-between;font-size:11px;color:#7C848E;margin-top:5px}
+
+  /* 构件说明卡 */
+  .card{position:fixed;right:22px;top:238px;width:330px;padding:16px 18px 15px;border-radius:14px;
+    background:rgba(12,16,21,.82);backdrop-filter:blur(12px);border:1px solid rgba(127,192,222,.4);
+    box-shadow:0 20px 44px rgba(0,0,0,.5);display:none}
+  .card.show{display:block;animation:cardin .22s ease-out}
+  @keyframes cardin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .card h3{margin:0 0 4px;font-size:16px;color:#8FD0E8;letter-spacing:.5px}
+  .card .where{font-size:11.5px;color:#8C949E;margin-bottom:10px}
+  .card p{margin:0 0 9px;font-size:12.8px;line-height:1.75;color:#DCE2E8}
+  .card p b{color:var(--xiang);font-weight:600}
+  .card .ref{font-size:11.5px;color:#7C848E;border-top:1px dashed rgba(242,239,232,.16);padding-top:8px}
+  .card .x{position:absolute;right:12px;top:10px;width:22px;height:22px;border-radius:50%;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;color:#9AA3AD;background:rgba(255,255,255,.06);font-size:13px}
+  .loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0A0D11;
+    font-size:15px;color:#9AA3AD;letter-spacing:2px;z-index:9}
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div class="panel">
+  <h1>台 · 巷 · 水 <span>｜戏台广场</span></h1>
+  <div class="sub">楠溪江岩头村老戏台片区有机更新 · 交互演示<br>点下面的天气，看这片场地怎么变</div>
+  <div class="data">
+    实测依据（1:500 地形图 + 8K 航拍）<br>
+    戏台本体 <b>18.9 × 12.4 m</b>｜台口朝南 <b>17.31 m</b><br>
+    台明高 <b>1.10 m</b>（推算）｜台面标高 <b>45.40 m</b><br>
+    中央广场 <b>3424.9 ㎡</b>｜研究范围 <b>5873.1 ㎡</b><br>
+    戏台至主溪流 <b>146.6 m</b>（现状 0 通视）
+  </div>
+</div>
+
+<div class="side">
+  <div class="sw on" id="swPeople"><span>台下人群</span><i></i></div>
+  <div class="sw on" id="swAudio"><span>环境音效</span><i></i></div>
+  <div class="sw" id="swRotate"><span>自动环绕</span><i></i></div>
+  <div class="sw on" id="swMark"><span>构件标注点</span><i></i></div>
+</div>
+
+<div class="sunbar">
+  <div class="row"><span>日照时段</span><b id="sunTime">13:00　正午</b></div>
+  <input type="range" id="sunRange" min="6" max="20" step="0.25" value="13">
+  <div class="marks"><span>6:00 清晨</span><span>13:00</span><span>20:00 黄昏</span></div>
+</div>
+
+<div class="card" id="card">
+  <div class="x" id="cardX">✕</div>
+  <h3 id="cardT">构件</h3>
+  <div class="where" id="cardW"></div>
+  <p id="cardB"></p>
+  <div class="ref" id="cardR"></div>
+</div>
+
+<div class="weather">
+  <div class="wbtn on" data-w="sun"><span class="ico">☀️</span><span>晴天</span></div>
+  <div class="wbtn" data-w="rain"><span class="ico">🌧️</span><span>下雨</span></div>
+  <div class="wbtn" data-w="wind"><span class="ico">🌬️</span><span>刮风</span></div>
+  <div class="wbtn" data-w="storm"><span class="ico">⛈️</span><span>打雷</span></div>
+</div>
+
+<div class="state" id="stateText">当前：<b>晴天</b>　檐下遮雨棚打开，台下广场是老人的棋牌场</div>
+<div class="hint">点天上的 <b style="color:#FFD98A">太阳 / 云</b> 换天气　·　点<b style="color:#8FD0E8">建筑构件</b>看做法<br>拖动 = 旋转　滚轮 = 推拉　双击 = 回正南　滑杆 = 改日照</div>
+<div class="loading" id="loading">正在生成场地…</div>
+
+<script src="three.min.js"></script>
+<script>
+/* =========================================================
+   《台·巷·水》戏台广场 · 交互式 3D 演示
+   几何依据：戏台本体 18.9 × 12.4 m，台口朝南，台明高 1.10 m
+   建筑类型：80 年代影剧院式（方正、封闭体量 + 大跨双坡屋面）
+   ========================================================= */
+
+const W = 18.9, D = 12.4, PLINTH = 1.10;   // 戏台尺寸与台明
+const S = 1;                                // 1 单位 = 1 米
+const annexBoxes = [], waterSegs = [], beds = [];   /* 供构件标注使用（必须在任何使用之前声明） */
+
+/* ---------- 基础 ---------- */
+const app = document.getElementById('app');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+app.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xBBD6E8, 60, 240);
+
+const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 900);
+const cam = { az: 0.06, pol: 1.16, dist: 46, target: new THREE.Vector3(0, 4.4, 0) };
+function applyCamera() {
+  const { az, pol, dist, target } = cam;
+  camera.position.set(
+    target.x + dist * Math.sin(pol) * Math.sin(az),
+    target.y + dist * Math.cos(pol),
+    target.z + dist * Math.sin(pol) * Math.cos(az)
+  );
+  camera.lookAt(target);
+}
+applyCamera();
+
+/* ---------- 画布纹理工具 ---------- */
+function canvasTex(w, h, draw) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); draw(g, w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.anisotropy = 4;
+  return t;
+}
+/* 铺装：石板 + 分缝 */
+const paveTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = '#D9D2C4'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = 'rgba(0,0,0,' + (0.02 + (i % 7) * 0.004) + ')';
+    g.fillRect((i * 97) % w, (i * 53) % h, 3, 3);
+  }
+  g.strokeStyle = 'rgba(80,74,64,.35)'; g.lineWidth = 3;
+  for (let i = 0; i <= 8; i++) {
+    g.beginPath(); g.moveTo(0, i * h / 8); g.lineTo(w, i * h / 8); g.stroke();
+    g.beginPath(); g.moveTo(i * w / 8, 0); g.lineTo(i * w / 8, h); g.stroke();
+  }
+});
+paveTex.wrapS = paveTex.wrapT = THREE.RepeatWrapping; paveTex.repeat.set(14, 14);
+
+/* 瓦屋面 */
+const tileTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#6E737A'; g.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 16) {
+    g.fillStyle = (y / 16) % 2 ? '#646A72' : '#767C85';
+    g.fillRect(0, y, w, 7);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y + 7, w, 2);
+  }
+});
+tileTex.wrapS = tileTex.wrapT = THREE.RepeatWrapping; tileTex.repeat.set(10, 6);
+
+/* 抹灰墙面 */
+const wallTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#E6DED0'; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1400; i++) {
+    g.fillStyle = 'rgba(120,110,96,' + (0.015 + (i % 5) * 0.006) + ')';
+    g.fillRect((i * 61) % w, (i * 37) % h, 2, 2);
+  }
+});
+wallTex.wrapS = wallTex.wrapT = THREE.RepeatWrapping; wallTex.repeat.set(3, 2);
+
+const brickTex = canvasTex(256, 128, (g, w, h) => {
+  g.fillStyle = '#C9B7A2'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(90,74,60,.35)'; g.lineWidth = 2;
+  for (let y = 0; y < h; y += 16) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    const off = (y / 16) % 2 ? 16 : 0;
+    for (let x = off; x < w; x += 32) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 16); g.stroke(); }
+  }
+});
+brickTex.wrapS = brickTex.wrapT = THREE.RepeatWrapping; brickTex.repeat.set(4, 2);
+
+/* 文字牌 */
+function signTex(text, bg, fg) {
+  return canvasTex(256, 96, (g, w, h) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    g.fillStyle = fg; g.font = 'bold 52px "Microsoft YaHei",sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text, w / 2, h / 2 + 2);
+  });
+}
+
+/* ---------- 天空穹顶（着色器） ---------- */
+const skyUniforms = {
+  topColor:   { value: new THREE.Color(0x6FA8D6) },
+  midColor:   { value: new THREE.Color(0xCFE6F3) },
+  botColor:   { value: new THREE.Color(0xEFE7D8) },
+  sunDir:     { value: new THREE.Vector3(0.45, 0.55, 0.7).normalize() },
+  sunColor:   { value: new THREE.Color(0xFFF2CF) },
+  sunPower:   { value: 0.55 },
+  flash:      { value: 0.0 }
+};
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(420, 40, 24),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, uniforms: skyUniforms,
+    vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `
+      uniform vec3 topColor, midColor, botColor, sunColor;
+      uniform vec3 sunDir; uniform float sunPower, flash;
+      varying vec3 vDir;
+      void main(){
+        float h = clamp(vDir.y, -0.2, 1.0);
+        vec3 col = mix(botColor, midColor, smoothstep(-0.02, 0.30, h));
+        col = mix(col, topColor, smoothstep(0.22, 0.85, h));
+        float sd = max(dot(normalize(vDir), normalize(sunDir)), 0.0);
+        col += sunColor * pow(sd, 18.0) * sunPower * 0.85;          // 光晕
+        col += sunColor * smoothstep(0.9975, 1.0, sd) * sunPower;    // 日盘
+        col += vec3(1.0, 0.97, 0.92) * flash;                        // 闪电整片亮
+        gl_FragColor = vec4(col, 1.0);
+      }`
+  })
+);
+sky.frustumCulled = false;
+scene.add(sky);
+
+/* ---------- 光照 ---------- */
+const hemi = new THREE.HemisphereLight(0xDCEBF5, 0x6B6353, 0.6);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xFFF0D2, 2.0);
+sun.position.set(26, 34, 30);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 160;
+sun.shadow.camera.left = -55; sun.shadow.camera.right = 55;
+sun.shadow.camera.top = 55; sun.shadow.camera.bottom = -55;
+sun.shadow.bias = -0.0008;
+scene.add(sun);
+const fill = new THREE.DirectionalLight(0xBFD6E8, 0.35);
+fill.position.set(-24, 18, -22);
+scene.add(fill);
+
+/* ---------- 地面 ---------- */
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(320, 320),
+  new THREE.MeshStandardMaterial({ map: paveTex, roughness: 0.92, metalness: 0.02 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+/* 露天剧场台前广场（略抬高的铺装平台 + 广场范围示意） */
+const plaza = new THREE.Mesh(
+  new THREE.BoxGeometry(52, 0.14, 40),
+  new THREE.MeshStandardMaterial({ color: 0xE2DACB, roughness: 0.85 })
+);
+plaza.position.set(0, 0.07, 14);
+plaza.receiveShadow = true;
+scene.add(plaza);
+
+/* 水线导水铺装：从台口指向西侧巷口（隐喻被遮挡的溪流） */
+const waterLineMat = new THREE.MeshStandardMaterial({ color: 0x4E9BBF, roughness: 0.5, metalness: 0.1, transparent: true, opacity: 0.85 });
+for (let i = 0; i < 9; i++) {
+  const seg = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.05, 0.5), waterLineMat);
+  seg.position.set(-6 - i * 2.9, 0.16, 26 - i * 0.5);
+  seg.rotation.y = -0.18;
+  scene.add(seg);
+  waterSegs.push(seg);
+}
+
+/* ---------- 戏台本体（方正、封闭的影剧院式体量） ---------- */
+const stageGroup = new THREE.Group();
+scene.add(stageGroup);
+
+/* 台明（石台基） */
+const plinthMat = new THREE.MeshStandardMaterial({ color: 0xBFB6A6, roughness: 0.9 });
+const plinth = new THREE.Mesh(new THREE.BoxGeometry(W + 2.6, PLINTH, D + 2.6), plinthMat);
+plinth.position.set(0, PLINTH / 2, 0);
+plinth.castShadow = plinth.receiveShadow = true;
+stageGroup.add(plinth);
+
+/* 主体墙身（实体，非通透） */
+const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92 });
+const body = new THREE.Mesh(new THREE.BoxGeometry(W, 7.2, D), wallMat);
+body.position.set(0, PLINTH + 3.6, 0);
+body.castShadow = body.receiveShadow = true;
+stageGroup.add(body);
+/* 勒脚 */
+const skirt = new THREE.Mesh(new THREE.BoxGeometry(W + 0.3, 1.0, D + 0.3),
+  new THREE.MeshStandardMaterial({ color: 0x9E9486, roughness: 0.95 }));
+skirt.position.set(0, PLINTH + 0.5, 0);
+skirt.castShadow = true;
+stageGroup.add(skirt);
+
+/* 大跨双坡屋面（含出檐） */
+const roofH = 4.4, eave = 1.6;
+const roofGeo = new THREE.BufferGeometry();
+(function () {
+  const x = W / 2 + eave, z = D / 2 + eave, y0 = PLINTH + 7.2, y1 = y0 + roofH;
+  const v = new Float32Array([
+    // 南坡
+    -x, y0, z,   x, y0, z,   x, y1, 0,   -x, y0, z,   x, y1, 0,   -x, y1, 0,
+    // 北坡
+    x, y0, -z,  -x, y0, -z,  -x, y1, 0,   x, y0, -z,  -x, y1, 0,   x, y1, 0,
+    // 西山墙（坡面三角）
+    -x, y0, -z, -x, y0, z,  -x, y1, 0,
+    // 东山墙（坡面三角）
+    x, y0, z,   x, y0, -z,   x, y1, 0
+  ]);
+  roofGeo.setAttribute('position', new THREE.BufferAttribute(v, 3));
+  roofGeo.computeVertexNormals();
+})();
+const roof = new THREE.Mesh(roofGeo, new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.85, side: THREE.DoubleSide }));
+roof.castShadow = roof.receiveShadow = true;
+stageGroup.add(roof);
+/* 屋脊 */
+const ridge = new THREE.Mesh(new THREE.BoxGeometry(W + eave * 2, 0.42, 0.7),
+  new THREE.MeshStandardMaterial({ color: 0x555A61, roughness: 0.8 }));
+ridge.position.set(0, PLINTH + 7.2 + roofH, 0);
+ridge.castShadow = true;
+stageGroup.add(ridge);
+
+/* 南立面：台口（凹进的门洞，朝南） */
+const mouthW = 10.4, mouthH = 4.6;
+const mouth = new THREE.Mesh(new THREE.BoxGeometry(mouthW, mouthH, 0.5),
+  new THREE.MeshStandardMaterial({ color: 0x2A2F36, roughness: 0.7 }));
+mouth.position.set(0, PLINTH + mouthH / 2 + 0.35, D / 2 + 0.02);
+stageGroup.add(mouth);
+/* 台板（台面） */
+const deck = new THREE.Mesh(new THREE.BoxGeometry(mouthW + 0.6, 0.34, 8.4),
+  new THREE.MeshStandardMaterial({ color: 0x8B6F47, roughness: 0.75 }));
+deck.position.set(0, PLINTH + 1.15, D / 2 - 4.2);
+deck.castShadow = deck.receiveShadow = true;
+stageGroup.add(deck);
+/* 台口内暖光（村史展台） */
+const innerLight = new THREE.PointLight(0xFFC98A, 1.5, 22, 2);
+innerLight.position.set(0, PLINTH + 2.6, D / 2 - 3.4);
+stageGroup.add(innerLight);
+const innerGlow = new THREE.Mesh(new THREE.PlaneGeometry(mouthW - 0.8, mouthH - 0.9),
+  new THREE.MeshBasicMaterial({ color: 0xE8B87A, transparent: true, opacity: 0.55 }));
+innerGlow.position.set(0, PLINTH + mouthH / 2 + 0.3, D / 2 - 0.28);
+stageGroup.add(innerGlow);
+/* 台口边框（水泥饰面） */
+const frameMat = new THREE.MeshStandardMaterial({ color: 0xCFC6B6, roughness: 0.9 });
+[[0, PLINTH + mouthH + 0.62, mouthW + 1.2, 0.5], [-(mouthW / 2 + 0.4), PLINTH + mouthH / 2 + 0.35, 0.5, mouthH + 0.9],
+ [(mouthW / 2 + 0.4), PLINTH + mouthH / 2 + 0.35, 0.5, mouthH + 0.9]].forEach(function (p) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(p[2], p[3], 0.42), frameMat);
+  m.position.set(p[0], p[1], D / 2 + 0.1);
+  m.castShadow = true;
+  stageGroup.add(m);
+});
+
+/* 半室外门厅：檐下轻钢遮雨棚（可逆构件，檐廊下的"第二客厅"） */
+const canopyMat = new THREE.MeshStandardMaterial({ color: 0xBFE0EC, roughness: 0.35, metalness: 0.1, transparent: true, opacity: 0.42 });
+const canopy = new THREE.Mesh(new THREE.BoxGeometry(W + 3.2, 0.16, 6.2), canopyMat);
+canopy.position.set(0, PLINTH + 4.9, D / 2 + 3.1);
+stageGroup.add(canopy);
+const steelMat = new THREE.MeshStandardMaterial({ color: 0x8C949E, roughness: 0.5, metalness: 0.6 });
+for (let i = -3; i <= 3; i++) {
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 4.9, 10), steelMat);
+  col.position.set(i * 3.1, PLINTH + 2.45, D / 2 + 5.5);
+  col.castShadow = true;
+  stageGroup.add(col);
+}
+/* 檐下灯笼 */
+const lanternMat = new THREE.MeshStandardMaterial({ color: 0xC0392B, roughness: 0.6, emissive: 0x4A0F0A, emissiveIntensity: 0.5 });
+[-7.2, -3.6, 3.6, 7.2].forEach(function (x) {
+  const l = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), lanternMat);
+  l.position.set(x, PLINTH + 6.4, D / 2 + 1.5);
+  l.scale.y = 1.25;
+  stageGroup.add(l);
+});
+
+/* 台侧附属：便民服务带（东西各一间，低矮体量 + 招牌） */
+const annexMat = new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.95 });
+[['理发', -1], ['量血压', 1]].forEach(function (item) {
+  const sgn = item[1], name = item[0];
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(6.2, 3.5, 5.2), annexMat);
+  box.position.y = PLINTH + 1.75;
+  box.castShadow = box.receiveShadow = true;
+  g.add(box);
+  const r = new THREE.Mesh(new THREE.BoxGeometry(7.0, 0.32, 6.0),
+    new THREE.MeshStandardMaterial({ color: 0x5C6167, roughness: 0.85 }));
+  r.position.y = PLINTH + 3.66;
+  r.castShadow = true;
+  g.add(r);
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.4, 0.14),
+    new THREE.MeshStandardMaterial({ color: 0x6B4A2E, roughness: 0.8 }));
+  door.position.set(sgn * 1.2, PLINTH + 1.2, 2.62);
+  g.add(door);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.1),
+    new THREE.MeshBasicMaterial({ map: signTex(name, '#C0392B', '#FFFFFF') }));
+  sign.position.set(0, PLINTH + 3.0, 2.66);
+  g.add(sign);
+  g.position.set(sgn * (W / 2 + 3.6), 0, -1.2);
+  stageGroup.add(g);
+  annexBoxes.push(box);
+});
+
+/* 台仓（戏台后部附属；内部资料缺失，最高优先级补测） */
+const warehouse = new THREE.Mesh(new THREE.BoxGeometry(6.6, 3.9, 4.4),
+  new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.95 }));
+warehouse.position.set(0, PLINTH + 1.95, -(D / 2 + 2.6));
+warehouse.castShadow = warehouse.receiveShadow = true;
+stageGroup.add(warehouse);
+const whRoof = new THREE.Mesh(new THREE.BoxGeometry(7.4, 0.34, 5.1),
+  new THREE.MeshStandardMaterial({ color: 0x5C6167, roughness: 0.85 }));
+whRoof.position.set(0, PLINTH + 4.06, -(D / 2 + 2.6));
+whRoof.castShadow = true;
+stageGroup.add(whRoof);
+
+/* 北侧高窗（80 年代做法：高窗 + 竖挺） */
+const winMat = new THREE.MeshStandardMaterial({ color: 0x8FA6B5, roughness: 0.25, metalness: 0.35 });
+for (let i = -2; i <= 2; i++) {
+  const w = new THREE.Mesh(new THREE.BoxGeometry(1.5, 2.2, 0.12), winMat);
+  w.position.set(i * 3.0, PLINTH + 5.5, -D / 2 - 0.06);
+  stageGroup.add(w);
+}
+/* 东、西山墙高窗 */
+[-1, 1].forEach(function (s) {
+  for (let i = -1; i <= 1; i++) {
+    const w = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.8, 1.6), winMat);
+    w.position.set(s * (W / 2 + 0.06), PLINTH + 5.4, i * 3.2);
+    stageGroup.add(w);
+  }
+});
+
+/* ---------- 周边环境 ---------- */
+/* 民居（民国砖宅 / 80 年代楼房交替） */
+function house(x, z, w, d, h, kind, rotY) {
+  const g = new THREE.Group();
+  const mat = kind === 'old'
+    ? new THREE.MeshStandardMaterial({ map: brickTex, roughness: 0.95 })
+    : new THREE.MeshStandardMaterial({ color: 0xE3DED2, roughness: 0.9 });
+  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  b.position.y = h / 2; b.castShadow = b.receiveShadow = true; g.add(b);
+  /* 双坡屋顶 */
+  const rh = Math.min(2.4, w * 0.22);
+  const geo = new THREE.BufferGeometry();
+  const hx = w / 2 + 0.5, hz = d / 2 + 0.5;
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([
+    -hx, h, hz, hx, h, hz, hx, h + rh, 0, -hx, h, hz, hx, h + rh, 0, -hx, h + rh, 0,
+    hx, h, -hz, -hx, h, -hz, -hx, h + rh, 0, hx, h, -hz, -hx, h + rh, 0, hx, h + rh, 0,
+    -hx, h, -hz, -hx, h, hz, -hx, h + rh, 0, hx, h, hz, hx, h, -hz, hx, h + rh, 0
+  ]), 3));
+  geo.computeVertexNormals();
+  const r = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: kind === 'old' ? 0x4E5259 : 0x6B7078, roughness: 0.9, side: THREE.DoubleSide }));
+  r.castShadow = true; g.add(r);
+  g.position.set(x, 0, z); g.rotation.y = rotY || 0;
+  scene.add(g);
+  return g;
+}
+/* 西、东、北三面围合（南面留出广场与巷口） */
+house(-34, -6, 15, 11, 7.5, 'old', 0.08);
+house(-30, 12, 13, 10, 8.6, '80s', -0.05);
+house(31, -8, 16, 11, 7.8, '80s', -0.06);
+house(34, 10, 13, 10, 6.8, 'old', 0.05);
+house(-16, -30, 14, 10, 7.0, 'old', 0);
+house(6, -31, 15, 11, 8.2, '80s', 0);
+house(24, -26, 12, 10, 6.6, 'old', 0.1);
+
+/* 巷口框景（西侧民居之间的开口，暗示溪流方向） */
+const gap = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 6.4),
+  new THREE.MeshBasicMaterial({ color: 0x9EC4D8, transparent: true, opacity: 0.85 }));
+gap.position.set(-46, 3.2, 6);
+gap.rotation.y = Math.PI / 2;
+scene.add(gap);
+const streamHint = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.06, 34),
+  new THREE.MeshStandardMaterial({ color: 0x2E86AB, roughness: 0.25, metalness: 0.2 }));
+streamHint.position.set(-52, 0.08, 6);
+scene.add(streamHint);
+
+/* 树 */
+const trees = [];
+function tree(x, z, s) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.28 * s, 0.4 * s, 4.4 * s, 10),
+    new THREE.MeshStandardMaterial({ color: 0x6B4A2E, roughness: 0.9 }));
+  trunk.position.y = 2.2 * s; trunk.castShadow = true; g.add(trunk);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x4C8C4A, roughness: 0.85 });
+  [[0, 5.2, 0, 2.5], [-1.4, 4.5, 0.5, 1.7], [1.5, 4.6, -0.4, 1.8], [0.2, 6.3, 0.2, 1.5]].forEach(function (p) {
+    const c = new THREE.Mesh(new THREE.SphereGeometry(p[3] * s, 14, 10), leafMat);
+    c.position.set(p[0] * s, p[1] * s, p[2] * s);
+    c.castShadow = true;
+    g.add(c);
+  });
+  g.position.set(x, 0, z);
+  scene.add(g);
+  trees.push(g);
+  return g;
+}
+tree(-19, 22, 1.5); tree(19.5, 23, 1.4); tree(-24, 4, 1.2); tree(25, 3, 1.25);
+tree(-14, 30, 1.3); tree(14, 31, 1.35);
+
+/* 路灯与长椅 */
+const lampMat = new THREE.MeshStandardMaterial({ color: 0x7A828B, roughness: 0.6, metalness: 0.4 });
+const lampHeads = [];
+function lamp(x, z) {
+  const g = new THREE.Group();
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 5.4, 8), lampMat);
+  p.position.y = 2.7; p.castShadow = true; g.add(p);
+  const h = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xFFE9B8, emissive: 0x6B5A2A, emissiveIntensity: 0.4 }));
+  h.position.y = 5.5; g.add(h);
+  g.position.set(x, 0, z);
+  scene.add(g);
+  lampHeads.push(h);
+}
+lamp(-13, 20); lamp(13, 21); lamp(-17, 9); lamp(17.5, 8);
+function bench(x, z, rotY) {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8B6F47, roughness: 0.85 });
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.16, 0.6), wood);
+  seat.position.y = 0.5; seat.castShadow = true; g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, 0.14), wood);
+  back.position.set(0, 0.85, -0.24); g.add(back);
+  [[-1.05, 0], [1.05, 0]].forEach(function (p) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.5), lampMat);
+    leg.position.set(p[0], 0.25, 0); g.add(leg);
+  });
+  g.position.set(x, 0, z); g.rotation.y = rotY || 0;
+  scene.add(g);
+}
+bench(-10, 24, 0.1); bench(10, 25, -0.1);
+
+/* 古井（县级文保；实测距戏台 60.9 m，此处按可视性压缩距离） */
+const well = new THREE.Group();
+const wellRim = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.6, 0.85, 20),
+  new THREE.MeshStandardMaterial({ color: 0xB9B0A0, roughness: 0.95 }));
+wellRim.position.y = 0.42; wellRim.castShadow = wellRim.receiveShadow = true; well.add(wellRim);
+const wellWater = new THREE.Mesh(new THREE.CircleGeometry(1.25, 24),
+  new THREE.MeshStandardMaterial({ color: 0x2E86AB, roughness: 0.15, metalness: 0.4 }));
+wellWater.rotation.x = -Math.PI / 2; wellWater.position.y = 0.62; well.add(wellWater);
+const wellSign = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.7),
+  new THREE.MeshBasicMaterial({ map: signTex('古井', '#8E6BBF', '#FFFFFF') }));
+wellSign.position.set(0, 1.5, 0); well.add(wellSign);
+well.position.set(-20, 0, 11);
+scene.add(well);
+
+/* 共享菜园（规整不清除） */
+const soil = new THREE.Mesh(new THREE.BoxGeometry(15, 0.2, 10),
+  new THREE.MeshStandardMaterial({ color: 0xC9A87C, roughness: 0.95 }));
+soil.position.set(-15, 0.1, 17);
+soil.receiveShadow = true;
+scene.add(soil);
+for (let i = 0; i < 4; i++) {
+  for (let j = 0; j < 3; j++) {
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(3.0, 0.22, 2.3),
+      new THREE.MeshStandardMaterial({ color: 0x6E9B62, roughness: 0.9 }));
+    bed.position.set(-20.5 + j * 3.6, 0.24, 13.6 + i * 2.6);
+    bed.castShadow = bed.receiveShadow = true;
+    scene.add(bed);
+    beds.push(bed);
+  }
+}
+
+/* ---------- 人物 ---------- */
+const people = [];
+function makePerson(opts) {
+  const s = opts.scale || 1;
+  const g = new THREE.Group();
+  const shirt = new THREE.MeshStandardMaterial({ color: opts.shirt, roughness: 0.85 });
+  const pants = new THREE.MeshStandardMaterial({ color: opts.pants, roughness: 0.9 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xE8D3BE, roughness: 0.8 });
+  const hair = new THREE.MeshStandardMaterial({ color: opts.grey ? 0xCFCFCF : 0x2B2F36, roughness: 0.9 });
+
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(0.24 * s, 0.5 * s, 4, 10) : new THREE.CylinderGeometry(0.24 * s, 0.26 * s, 0.9 * s, 10), shirt);
+  torso.position.y = 1.12 * s; torso.castShadow = true; g.add(torso);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.19 * s, 14, 12), skin);
+  head.position.y = 1.62 * s; head.castShadow = true; g.add(head);
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.2 * s, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.6), hair);
+  cap.position.y = 1.64 * s; g.add(cap);
+
+  const limbs = {};
+  function limb(x, y, len, mat, r) {
+    const m = new THREE.Mesh(new THREE.CapsuleGeometry ? new THREE.CapsuleGeometry(r, len, 3, 8) : new THREE.CylinderGeometry(r, r, len, 8), mat);
+    m.position.set(x, y, 0);
+    m.geometry.translate(0, -len / 2, 0);
+    m.castShadow = true;
+    g.add(m);
+    return m;
+  }
+  limbs.armL = limb(-0.3 * s, 1.42 * s, 0.62 * s, shirt, 0.075 * s);
+  limbs.armR = limb(0.3 * s, 1.42 * s, 0.62 * s, shirt, 0.075 * s);
+  limbs.legL = limb(-0.13 * s, 0.72 * s, 0.7 * s, pants, 0.095 * s);
+  limbs.legR = limb(0.13 * s, 0.72 * s, 0.7 * s, pants, 0.095 * s);
+  g.userData.limbs = limbs;
+  g.userData.scale = s;
+
+  if (opts.umbrella) {
+    const um = new THREE.Group();
+    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8, 6), lampMat);
+    stick.position.y = 0.4; um.add(stick);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.34, 12),
+      new THREE.MeshStandardMaterial({ color: opts.umbrella, roughness: 0.7 }));
+    top.position.y = 0.82; um.add(top);
+    um.position.set(0.34 * s, 1.5 * s, 0);
+    um.visible = false;
+    g.add(um);
+    g.userData.umbrella = um;
+  }
+  scene.add(g);
+  people.push(g);
+  return g;
+}
+
+/* 棋牌桌（老人打麻将） */
+const tableMat = new THREE.MeshStandardMaterial({ color: 0x8B6F47, roughness: 0.8 });
+const mahjongGroup = new THREE.Group();
+const table = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.1, 1.5), tableMat);
+table.position.y = 0.76; table.castShadow = table.receiveShadow = true;
+mahjongGroup.add(table);
+const tableLeg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.72, 0.16), tableMat);
+tableLeg.position.y = 0.36; mahjongGroup.add(tableLeg);
+/* 麻将牌 */
+const tileMat = new THREE.MeshStandardMaterial({ color: 0xF3EFE4, roughness: 0.5 });
+for (let i = 0; i < 16; i++) {
+  const a = (i / 16) * Math.PI * 2, r = 0.5;
+  const t = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.07, 0.16), tileMat);
+  t.position.set(Math.cos(a) * r, 0.86, Math.sin(a) * r);
+  t.rotation.y = -a;
+  t.castShadow = true;
+  mahjongGroup.add(t);
+}
+/* 四位老人（坐姿） */
+const mahjongSeats = [];
+[[1.15, 0], [-1.15, 0], [0, 1.15], [0, -1.15]].forEach(function (p, i) {
+  const person = makePerson({
+    scale: 0.96, shirt: ['#4C6B8A', '#C0392B', '#7A6E8F', '#5F7F6E'][i],
+    pants: '#3A3F46', grey: true
+  });
+  person.userData.seated = true;
+  person.userData.seatAngle = Math.atan2(p[0], p[1]);
+  mahjongSeats.push({ person: person, offset: p });
+});
+mahjongGroup.add(new THREE.Object3D());
+scene.add(mahjongGroup);
+
+/* 走动的人 */
+const walkers = [
+  { p: makePerson({ scale: 1.0, shirt: '#4C6B8A', pants: '#2F3540', grey: true }), t: 0.05, speed: 0.028, path: 'south' },
+  { p: makePerson({ scale: 1.02, shirt: '#7A6E8F', pants: '#2F3540', grey: true }), t: 0.42, speed: 0.022, path: 'south' },
+  { p: makePerson({ scale: 0.94, shirt: '#C08A6A', pants: '#33404A' }), t: 0.72, speed: 0.031, path: 'east' }
+];
+/* 撑伞的路人（雨天出现） */
+const umbWalkers = [
+  { p: makePerson({ scale: 1.0, shirt: '#C0392B', pants: '#2F3540', umbrella: '#2E86AB' }), t: 0.2, speed: 0.05, path: 'south' },
+  { p: makePerson({ scale: 0.98, shirt: '#5F7F6E', pants: '#2F3540', umbrella: '#C0392B' }), t: 0.62, speed: 0.046, path: 'east' }
+];
+umbWalkers.forEach(function (w) { if (w.p.userData.umbrella) w.p.userData.umbrella.visible = true; });
+
+/* ---------- 构件标注 · 点击查看做法与论文依据 ---------- */
+const parts = [];
+const markerGroup = new THREE.Group();
+scene.add(markerGroup);
+function markerTexture() {
+  return canvasTex(128, 128, function (g, w, h) {
+    g.clearRect(0, 0, w, h);
+    g.beginPath(); g.arc(64, 64, 40, 0, Math.PI * 2);
+    g.fillStyle = 'rgba(127,192,222,.20)'; g.fill();
+    g.lineWidth = 7; g.strokeStyle = 'rgba(127,192,222,.95)'; g.stroke();
+    g.beginPath(); g.arc(64, 64, 13, 0, Math.PI * 2); g.fillStyle = '#8FD0E8'; g.fill();
+  });
+}
+function tag(obj, meta, marker) {
+  if (!obj) return;
+  obj.userData.meta = meta;
+  parts.push(obj);
+  if (marker) {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: markerTexture(), transparent: true, depthWrite: false, opacity: 0.95
+    }));
+    sp.position.set(marker[0], marker[1], marker[2]);
+    sp.scale.set(2.6, 2.6, 1);
+    sp.userData.meta = meta;          /* 标注点本身也可点：被遮挡的构件靠它打开 */
+    markerGroup.add(sp);
+  }
+}
+tag(roof, { t: '双坡瓦屋面', w: '屋面 · 出檐 1.6 m', b: '揭除失效防水层、更换糟朽椽条后重做防水与瓦面；出檐护住台口与墙体。屋面渗漏是<b>唯一有时间不可逆性的病因</b>，排危必须最先做。', r: '依据｜论文 4.2 结构病 · 9.1 戏台本体' }, [0, 13.8, 7.8]);
+tag(ridge, { t: '屋脊压顶', w: '屋面收口', b: '脊瓦压顶、瓦垄收口，避免雨水沿脊缝倒灌；与出檐一起构成屋面的第一道防线。', r: '依据｜9.1 戏台本体' }, [7.2, 13.2, 0]);
+tag(mouth, { t: '台口（朝南）', w: '凹进门洞 · 实测面宽 17.31 m', b: '保留原有台口尺度与凹进关系，洞口内为村史展台 / 议事台。凹口本身就是遮雨的半室外界面。', r: '依据｜6.2 台口转译 · 实测数据' }, [-3.4, 2.9, 12.6]);
+tag(deck, { t: '台板 · 分时使用', w: '村史展台 → 议事台 → 节庆演出台', b: '台面修复以结构排危为前提；展陈装置可拆装。同一块台板，一天里换三种用法。', r: '依据｜6.2 台板 · 8.3 分区—分时—分权' }, [3.6, 2.4, 12.6]);
+tag(canopy, { t: '檐下半室外门厅', w: '轻钢 + 阳光板 · 可逆构件', b: '螺栓连接、可整段拆装。雨天把牌桌与老人留在檐下——<b>檐下是雨季的"第二客厅"</b>，也是"银发触媒"真正落地的地方。', r: '依据｜6.2 台口 · 6.1 银发触媒 · 8.3' }, [5.6, 6.6, 8.6]);
+tag(plinth, { t: '台明石台基', w: '高 1.10 m（推算，待实测）', b: '保留原有台明；以无障碍坡道 + 扶手接入，坡度、平台尺寸与扶手高度按 GB 55019-2021 取值。', r: '依据｜9.1 · 10.3 无障碍复核' }, [-9.8, 1.6, 6.8]);
+annexBoxes.forEach(function (bx, i) {
+  tag(bx, { t: '侧台便民服务带', w: i === 0 ? '西侧 · 理发 / 寄存' : '东侧 · 量血压 / 工具租借', b: '把老人已有的活动先接住：理发、缝补、量血压、小件寄存、工具租借。<b>便民设施不是配套，是点火装置。</b>', r: '依据｜6.2 侧台 · 6.1 银发触媒' }, [i === 0 ? -14.2 : 14.2, 4.4, -1.2]);
+});
+tag(warehouse, { t: '台仓', w: '戏台后部附属 · 内部资料缺失', b: '最高优先级补测项。若最终无法进入，按"结构加固对象"处理：不安排新功能，只做排危；储藏、设备与无障碍卫生间移至台外解决。', r: '依据｜5.4 结构可逆性 · 6.2 台仓 · 9.1' }, [0, 15.5, -9.6]);
+tag(well, { t: '古井 · 县级文保', w: '距戏台 60.9 m（实测）', b: '最小干预展示：信息牌 + 低矮护栏，不改井体与井台。视线分析实测表明，这里是<b>现状唯一可被感知的水</b>（19 个采样点中 4 个通视；主溪流 100 个采样点 0 通视）。', r: '依据｜9.5 古井 · 4.2 空间病 · 视线分析实测' }, [-20, 3.0, 11]);
+tag(soil, { t: '共享菜园 · 规整不清除', w: '保留原耕种者使用权', b: '只做秩序化整理，不收回耕种权。上午作菜市、下午还给棋牌与闲聊——用分时替代驱赶。', r: '依据｜第八章总体设计 · 8.3 分区—分时—分权' }, [-15, 1.8, 17]);
+tag(waterSegs[0], { t: '铺装导水', w: '五手法之一', b: '用水纹铺装把视线与脚步引向最近的透水点。现状主溪流 0 通视，只能靠"视见—行至—听见—知晓"逐级重建。', r: '依据｜7.3 五手法工具箱' }, [-7.0, 1.8, 20.5]);
+tag(gap, { t: '巷口框景', w: '设计新增的透水视点', b: '借用两处民居之间的既有开口框住水面一线，不拆房、不动主体结构。目标：透水视点由 N=4 提升至 ≥3N，并新增 ≥2 处"听见水声"节点。', r: '依据｜7.3 · 7.4 H3 检验' }, [-20, 5.5, 4]);
+
+/* 说明卡 */
+const cardEl = document.getElementById('card');
+function showCard(meta) {
+  document.getElementById('cardT').textContent = meta.t;
+  document.getElementById('cardW').textContent = meta.w;
+  document.getElementById('cardB').innerHTML = meta.b;
+  document.getElementById('cardR').textContent = meta.r;
+  cardEl.classList.add('show');
+}
+function hideCard() { cardEl.classList.remove('show'); }
+document.getElementById('cardX').addEventListener('click', hideCard);
+
+/* ---------- 天气系统 ---------- */
+const WEATHER = {
+  sun: {
+    name: '晴天',
+    text: '檐下遮雨棚打开，台下广场是老人的棋牌场',
+    sky: { top: 0x4E8FC6, mid: 0xCFE6F3, bot: 0xEFE7D8, sunColor: 0xFFF2CF, sunPower: 0.62 },
+    dawn: { top: 0x2C4A73, mid: 0xE0A06A, bot: 0xF2C79A, sunColor: 0xFF9E52 },
+    sunIntensity: 2.15, sunColor: 0xFFF0D2, hemi: 0.62, fog: 0xBBD6E8, fogNear: 80, fogFar: 320,
+    rain: 0, wind: 0.12, flash: 0, groundRough: 0.92, exposure: 1.06
+  },
+  rain: {
+    name: '下雨',
+    text: '檐下成为"第二客厅"：老人们的牌桌挪到遮雨棚下，广场让给水',
+    sky: { top: 0x39506A, mid: 0x7E93A6, bot: 0xB9BFBE, sunColor: 0xD9E3EA, sunPower: 0.10 },
+    dawn: { top: 0x26313F, mid: 0x6E6F7C, bot: 0x9C9086, sunColor: 0xC9A07A },
+    sunIntensity: 0.55, sunColor: 0xCBD8E2, hemi: 0.5, fog: 0x8FA0AC, fogNear: 34, fogFar: 150,
+    rain: 0.85, wind: 0.32, flash: 0, groundRough: 0.35, exposure: 0.94
+  },
+  wind: {
+    name: '刮风',
+    text: '瓦面、菜地、树冠一起动——广场上的活动靠檐下与巷道背风面撑住',
+    sky: { top: 0x5C86AE, mid: 0xB9CFDE, bot: 0xDCD6C6, sunColor: 0xF2EEDC, sunPower: 0.3 },
+    dawn: { top: 0x33506F, mid: 0xA79E9C, bot: 0xD8BFA4, sunColor: 0xE8B98A },
+    sunIntensity: 1.35, sunColor: 0xEAF0F4, hemi: 0.62, fog: 0xC2D2DC, fogNear: 60, fogFar: 240,
+    rain: 0, wind: 1.0, flash: 0, groundRough: 0.7, exposure: 1.0
+  },
+  storm: {
+    name: '打雷',
+    text: '暴雨与闪电：唯一还能待的地方，是牢固的檐下与室内',
+    sky: { top: 0x2A3145, mid: 0x5D6478, bot: 0x8C8B84, sunColor: 0xAEB6C4, sunPower: 0.06 },
+    dawn: { top: 0x1C2130, mid: 0x484C60, bot: 0x6E6A6A, sunColor: 0x9A93A0 },
+    sunIntensity: 0.35, sunColor: 0xA9B4C2, hemi: 0.4, fog: 0x666E7A, fogNear: 26, fogFar: 130,
+    rain: 1.0, wind: 0.62, flash: 0.0, groundRough: 0.28, exposure: 0.88
+  }
+};
+let cur = 'sun';
+const blend = { sky: { top: new THREE.Color(), mid: new THREE.Color(), bot: new THREE.Color() }, dawn: { top: new THREE.Color(), mid: new THREE.Color(), bot: new THREE.Color() }, dawnSun: new THREE.Color(0xFF9E52), daySun: new THREE.Color(0xFFF0D2), sun: new THREE.Color(), rain: 0, wind: 0, rough: 0.92, exposure: 1.06, sunIntensity: 2, hemi: 0.6, flashNow: 0 };
+
+/* 雨粒子（线段，条纹感更强） */
+const RAIN_N = 2600;
+const rainGeo = new THREE.BufferGeometry();
+const rainPos = new Float32Array(RAIN_N * 6);
+const rainSeed = new Float32Array(RAIN_N * 3);
+for (let i = 0; i < RAIN_N; i++) {
+  const x = (Math.sin(i * 12.9898) * 43758.5453) % 1;
+  const z = (Math.sin(i * 78.233) * 12345.6789) % 1;
+  rainSeed[i * 3] = ((x + 1) % 1) * 90 - 45;
+  rainSeed[i * 3 + 1] = ((z + 1) % 1) * 40;
+  rainSeed[i * 3 + 2] = (((x * 3 + z) + 1) % 1) * 90 - 45;
+}
+rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rain = new THREE.LineSegments(rainGeo, new THREE.LineBasicMaterial({ color: 0xC7D8E4, transparent: true, opacity: 0.0 }));
+rain.frustumCulled = false;
+scene.add(rain);
+
+/* 风：飘叶 */
+const LEAF_N = 260;
+const leafGeo = new THREE.BufferGeometry();
+const leafPos = new Float32Array(LEAF_N * 3);
+const leafPhase = new Float32Array(LEAF_N);
+for (let i = 0; i < LEAF_N; i++) {
+  leafPos[i * 3] = (((i * 37) % 90) - 45);
+  leafPos[i * 3 + 1] = ((i * 13) % 14) + 0.6;
+  leafPos[i * 3 + 2] = (((i * 53) % 80) - 40);
+  leafPhase[i] = (i % 100) / 100 * Math.PI * 2;
+}
+leafGeo.setAttribute('position', new THREE.BufferAttribute(leafPos, 3));
+const leafMatP = new THREE.PointsMaterial({ color: 0x8FA05C, size: 0.42, transparent: true, opacity: 0 });
+const leaves = new THREE.Points(leafGeo, leafMatP);
+leaves.frustumCulled = false;
+scene.add(leaves);
+
+/* 雨天地面涟漪 */
+const RIPPLE_N = 26;
+const ripples = [];
+const rippleMat = new THREE.MeshBasicMaterial({ color: 0xD8E8F0, transparent: true, opacity: 0, side: THREE.DoubleSide });
+for (let i = 0; i < RIPPLE_N; i++) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.5, 24), rippleMat.clone());
+  m.rotation.x = -Math.PI / 2;
+  m.position.set((((i * 29) % 60) - 30), 0.16, (((i * 47) % 50) - 12) + 12);
+  scene.add(m);
+  ripples.push({ mesh: m, t: (i % 10) / 10 });
+}
+
+/* ---------- 音效（WebAudio，全部合成） ---------- */
+const audio = { ctx: null, ready: false, rainGain: null, windGain: null, master: null, birds: null };
+function initAudio() {
+  if (audio.ready) return;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  const ctx = new AC();
+  audio.ctx = ctx;
+  audio.master = ctx.createGain(); audio.master.gain.value = 0.6; audio.master.connect(ctx.destination);
+
+  /* 雨：噪声 → 带通 */
+  const rainBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+  const rd = rainBuf.getChannelData(0);
+  for (let i = 0; i < rd.length; i++) rd[i] = (Math.sin(i * 0.017) * 99991 % 1) * 2 - 1;
+  const rainSrc = ctx.createBufferSource(); rainSrc.buffer = rainBuf; rainSrc.loop = true;
+  const rainBP = ctx.createBiquadFilter(); rainBP.type = 'bandpass'; rainBP.frequency.value = 2400; rainBP.Q.value = 0.7;
+  audio.rainGain = ctx.createGain(); audio.rainGain.gain.value = 0.0;
+  rainSrc.connect(rainBP); rainBP.connect(audio.rainGain); audio.rainGain.connect(audio.master);
+  rainSrc.start();
+
+  /* 风：噪声 → 低通 + LFO */
+  const windBuf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+  const wd = windBuf.getChannelData(0);
+  for (let i = 0; i < wd.length; i++) wd[i] = (Math.sin(i * 0.0031) * 77773 % 1) * 2 - 1;
+  const windSrc = ctx.createBufferSource(); windSrc.buffer = windBuf; windSrc.loop = true;
+  const windLP = ctx.createBiquadFilter(); windLP.type = 'lowpass'; windLP.frequency.value = 520;
+  audio.windGain = ctx.createGain(); audio.windGain.gain.value = 0.0;
+  const lfo = ctx.createOscillator(); lfo.frequency.value = 0.22;
+  const lfoGain = ctx.createGain(); lfoGain.gain.value = 0.5;
+  lfo.connect(lfoGain); lfoGain.connect(audio.windGain.gain);
+  windSrc.connect(windLP); windLP.connect(audio.windGain); audio.windGain.connect(audio.master);
+  windSrc.start(); lfo.start();
+  audio.ready = true;
+}
+function thunderSound() {
+  if (!audio.ready) return;
+  const ctx = audio.ctx, t0 = ctx.currentTime;
+  const dur = 2.8;
+  const buf = ctx.createBuffer(1, ctx.sampleRate * dur, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) {
+    const k = i / d.length;
+    d[i] = ((Math.sin(i * 0.0017) * 31337 % 1) * 2 - 1) * Math.exp(-k * 2.2);
+  }
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220;
+  const g = ctx.createGain(); g.gain.value = 0.55;
+  src.connect(lp); lp.connect(g); g.connect(audio.master);
+  src.start(t0);
+}
+function birdSound() {
+  if (!audio.ready) return;
+  const ctx = audio.ctx, t0 = ctx.currentTime;
+  for (let i = 0; i < 2; i++) {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    const g = ctx.createGain();
+    o.frequency.setValueAtTime(2100 + i * 300, t0 + i * 0.12);
+    o.frequency.exponentialRampToValueAtTime(3200 + i * 200, t0 + i * 0.12 + 0.09);
+    g.gain.setValueAtTime(0.0001, t0 + i * 0.12);
+    g.gain.exponentialRampToValueAtTime(0.05, t0 + i * 0.12 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.12 + 0.16);
+    o.connect(g); g.connect(audio.master);
+    o.start(t0 + i * 0.12); o.stop(t0 + i * 0.12 + 0.2);
+  }
+}
+
+/* ---------- 天空天气球（直接点天上的太阳/云） ---------- */
+function orbTexture(kind, label) {
+  return canvasTex(256, 256, function (g, w, h) {
+    g.clearRect(0, 0, w, h);
+    const cx = w / 2, cy = 96;
+    if (kind === 'sun') {
+      const rg = g.createRadialGradient(cx, cy, 8, cx, cy, 92);
+      rg.addColorStop(0, '#FFF6D0'); rg.addColorStop(0.45, '#FFD877'); rg.addColorStop(1, 'rgba(255,190,80,0)');
+      g.fillStyle = rg; g.beginPath(); g.arc(cx, cy, 92, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(255,225,150,.85)'; g.lineWidth = 6;
+      for (let i = 0; i < 12; i++) {
+        const a = i / 12 * Math.PI * 2;
+        g.beginPath();
+        g.moveTo(cx + Math.cos(a) * 62, cy + Math.sin(a) * 62);
+        g.lineTo(cx + Math.cos(a) * 84, cy + Math.sin(a) * 84);
+        g.stroke();
+      }
+    } else if (kind === 'rain' || kind === 'storm') {
+      const c = kind === 'storm' ? '#4A4F5A' : '#8A929B';
+      g.fillStyle = c;
+      [[-42, 10, 40], [0, -8, 52], [44, 12, 38]].forEach(function (p) {
+        g.beginPath(); g.arc(cx + p[0], cy + p[1], p[2], 0, Math.PI * 2); g.fill();
+      });
+      g.fillRect(cx - 62, cy + 4, 124, 34);
+      if (kind === 'storm') {
+        g.fillStyle = '#FFD84D';
+        g.beginPath();
+        g.moveTo(cx + 6, cy + 26); g.lineTo(cx - 14, cy + 74); g.lineTo(cx + 4, cy + 74);
+        g.lineTo(cx - 8, cy + 118); g.lineTo(cx + 24, cy + 62); g.lineTo(cx + 4, cy + 62);
+        g.lineTo(cx + 22, cy + 26); g.closePath(); g.fill();
+      } else {
+        g.strokeStyle = '#7FC0DE'; g.lineWidth = 6; g.lineCap = 'round';
+        for (let i = -2; i <= 2; i++) {
+          g.beginPath(); g.moveTo(cx + i * 24, cy + 48); g.lineTo(cx + i * 24 - 8, cy + 92); g.stroke();
+        }
+      }
+    } else {
+      g.fillStyle = 'rgba(230,238,244,.92)';
+      [[-34, 6, 30], [6, -10, 40], [42, 8, 28]].forEach(function (p) {
+        g.beginPath(); g.arc(cx + p[0], cy + p[1], p[2], 0, Math.PI * 2); g.fill();
+      });
+      g.strokeStyle = '#DCEAF2'; g.lineWidth = 7; g.lineCap = 'round';
+      for (let i = 0; i < 3; i++) {
+        g.beginPath();
+        g.moveTo(cx - 70, cy + 44 + i * 22);
+        g.bezierCurveTo(cx - 20, cy + 26 + i * 22, cx + 20, cy + 64 + i * 22, cx + 70, cy + 42 + i * 22);
+        g.stroke();
+      }
+    }
+    /* 文字标签 */
+    g.font = 'bold 40px "Microsoft YaHei",sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillStyle = 'rgba(0,0,0,.45)'; g.fillText(label, cx + 2, 213);
+    g.fillStyle = '#F2EFE8'; g.fillText(label, cx, 211);
+  });
+}
+const orbGroup = new THREE.Group();
+scene.add(orbGroup);
+const orbs = [];
+[
+  { w: 'sun', az: -0.42, el: 0.10, label: '晴' },
+  { w: 'rain', az: -0.15, el: 0.10, label: '雨' },
+  { w: 'wind', az: 0.15, el: 0.10, label: '风' },
+  { w: 'storm', az: 0.42, el: 0.10, label: '雷' }
+].forEach(function (o) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: orbTexture(o.w, o.label), transparent: true, depthWrite: false, opacity: 0.95
+  }));
+  const R = 110, ce = Math.cos(o.el);
+  /* 注意：默认相机在南侧（+Z）朝北看，天空中的球挂在北侧（-Z）、贴近地平线才在画面内 */
+  sp.position.set(R * Math.sin(o.az) * ce, R * Math.sin(o.el), -R * Math.cos(o.az) * ce);
+  sp.scale.set(16, 16, 1);
+  sp.userData.w = o.w;
+  orbGroup.add(sp);
+  orbs.push(sp);
+});
+
+/* ---------- 交互 ---------- */
+const btnList = Array.prototype.slice.call(document.querySelectorAll('.wbtn'));
+function setWeather(w) {
+  if (!WEATHER[w]) return;
+  cur = w;
+  btnList.forEach(function (b) { b.classList.toggle('on', b.dataset.w === w); });
+  document.getElementById('stateText').innerHTML = '当前：<b>' + WEATHER[w].name + '</b>　' + WEATHER[w].text;
+  initAudio();
+  if (audio.ctx && audio.ctx.state === 'suspended') audio.ctx.resume();
+}
+btnList.forEach(function (b) { b.addEventListener('click', function () { setWeather(b.dataset.w); }); });
+
+const swPeople = document.getElementById('swPeople');
+const swAudio = document.getElementById('swAudio');
+const swRotate = document.getElementById('swRotate');
+let showPeople = true, audioOn = true, autoRotate = false;
+swPeople.addEventListener('click', function () {
+  showPeople = !showPeople; swPeople.classList.toggle('on', showPeople);
+  people.forEach(function (p) { p.visible = showPeople; });
+  mahjongGroup.visible = showPeople;
+});
+swAudio.addEventListener('click', function () {
+  audioOn = !audioOn; swAudio.classList.toggle('on', audioOn);
+  if (audio.master) audio.master.gain.value = audioOn ? 0.6 : 0;
+});
+swRotate.addEventListener('click', function () {
+  autoRotate = !autoRotate; swRotate.classList.toggle('on', autoRotate);
+});
+const swMark = document.getElementById('swMark');
+let showMarkers = true;
+swMark.addEventListener('click', function () {
+  showMarkers = !showMarkers; swMark.classList.toggle('on', showMarkers);
+  markerGroup.visible = showMarkers;
+});
+
+/* 轨道相机（自写，不依赖外部控件） + 天空天气球点选 */
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+let dragging = false, lastX = 0, lastY = 0, downX = 0, downY = 0, moved = 0;
+
+function pickAt(clientX, clientY) {
+  ndc.x = (clientX / innerWidth) * 2 - 1;
+  ndc.y = -(clientY / innerHeight) * 2 + 1;
+  raycaster.setFromCamera(ndc, camera);
+  const orbHit = raycaster.intersectObjects(orbs, false)[0];
+  if (orbHit) return { kind: 'orb', w: orbHit.object.userData.w };
+  /* 标注点与构件比距离：谁离相机更近谁中（避免建筑背后的标注点抢点击） */
+  const mHits = markerGroup.visible ? raycaster.intersectObjects(markerGroup.children, false) : [];
+  const pHits = raycaster.intersectObjects(parts, true);
+  let ph = null;
+  for (let i = 0; i < pHits.length; i++) {
+    let o = pHits[i].object;
+    while (o && !o.userData.meta) o = o.parent;
+    if (o && o.userData.meta) { ph = { meta: o.userData.meta, dist: pHits[i].distance }; break; }
+  }
+  const mh = mHits.length ? { meta: mHits[0].object.userData.meta, dist: mHits[0].distance } : null;
+  if (mh && (!ph || mh.dist < ph.dist)) return { kind: 'part', meta: mh.meta };
+  if (ph) return { kind: 'part', meta: ph.meta };
+  return null;
+}
+
+renderer.domElement.addEventListener('pointerdown', function (e) {
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  downX = e.clientX; downY = e.clientY; moved = 0;
+});
+addEventListener('pointerup', function (e) {
+  dragging = false;
+  if (moved < 6) {                       /* 视为点击而非拖动 */
+    const hit = pickAt(e.clientX, e.clientY);
+    if (hit && hit.kind === 'orb') setWeather(hit.w);
+    else if (hit && hit.kind === 'part') showCard(hit.meta);
+    else hideCard();
+  }
+});
+addEventListener('pointermove', function (e) {
+  if (dragging) {
+    moved += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+    cam.az -= (e.clientX - lastX) * 0.006;
+    cam.pol = Math.max(0.35, Math.min(1.48, cam.pol - (e.clientY - lastY) * 0.005));
+    lastX = e.clientX; lastY = e.clientY;
+    applyCamera();
+  } else {
+    renderer.domElement.style.cursor = pickAt(e.clientX, e.clientY) ? 'pointer' : 'grab';
+  }
+});
+renderer.domElement.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  cam.dist = Math.max(16, Math.min(120, cam.dist + e.deltaY * 0.03));
+  applyCamera();
+}, { passive: false });
+renderer.domElement.addEventListener('dblclick', function () {
+  cam.az = 0.06; cam.pol = 1.16; cam.dist = 46; applyCamera();
+});
+addEventListener('resize', function () {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+/* ---------- 日照时段（清晨 — 正午 — 黄昏） ---------- */
+let timeOfDay = 13.0;
+const sunRangeEl = document.getElementById('sunRange');
+const sunTimeEl = document.getElementById('sunTime');
+function phaseWord(t) {
+  if (t < 7.5) return '清晨';
+  if (t < 11) return '上午';
+  if (t < 14) return '正午';
+  if (t < 17.5) return '下午';
+  return '黄昏';
+}
+function syncSunLabel() {
+  const hh = Math.floor(timeOfDay), mm = Math.round((timeOfDay - hh) * 60);
+  sunTimeEl.textContent = (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm + '　' + phaseWord(timeOfDay);
+}
+sunRangeEl.addEventListener('input', function () { timeOfDay = parseFloat(this.value); syncSunLabel(); });
+syncSunLabel();
+
+const sunDirV = new THREE.Vector3(0.45, 0.55, 0.7).normalize();
+function applyPhase() {
+  const dayT = (timeOfDay - 6) / 14;                     /* 0 = 6:00, 1 = 20:00 */
+  const ang = (0.5 - dayT) * Math.PI;                    /* 上午偏东(+x)，下午偏西(-x) */
+  const elev = Math.max(0.03, Math.sin(Math.PI * dayT)) * 1.06;
+  sunDirV.set(Math.sin(ang) * Math.cos(elev), Math.sin(elev), Math.cos(ang) * Math.cos(elev)).normalize();
+  const k = Math.min(1, Math.max(0, elev / 0.47));       /* 0 = 贴地平线，1 = 高日照 */
+
+  sun.position.copy(sunDirV).multiplyScalar(70);
+  skyUniforms.sunDir.value.copy(sunDirV);
+
+  /* 天空 = 晨昏色 ←→ 白天色（天气色已由 updateWeather 混入 blend） */
+  skyUniforms.topColor.value.copy(blend.dawn.top).lerp(blend.sky.top, k);
+  skyUniforms.midColor.value.copy(blend.dawn.mid).lerp(blend.sky.mid, k);
+  skyUniforms.botColor.value.copy(blend.dawn.bot).lerp(blend.sky.bot, k);
+  skyUniforms.sunColor.value.copy(blend.dawnSun).lerp(blend.daySun, k);
+
+  sun.color.copy(blend.dawnSun).lerp(blend.daySun, k);
+  sun.intensity *= (0.26 + 0.74 * k);
+  hemi.intensity *= (0.48 + 0.52 * k);
+  renderer.toneMappingExposure *= (0.86 + 0.14 * k);
+
+  /* 天色暗下来时，灯笼与路灯自己亮起来 */
+  const wet = (cur === 'storm' || cur === 'rain');
+  lanternMat.emissiveIntensity = (wet ? 1.1 : 0.5) + (1 - k) * 1.5;
+  lampHeads.forEach(function (h) { h.material.emissiveIntensity = (wet ? 1.2 : 0.4) + (1 - k) * 1.3; });
+  /* 光照角度低时，太阳光斑更暖更贴地平线 */
+  skyUniforms.sunPower.value = (cur === 'sun' ? 0.65 : 0.16) * (0.55 + 0.45 * k) + flashValue * 0.3;
+}
+
+/* ---------- 每帧更新 ---------- */
+const clock = new THREE.Clock();
+let flashTimer = 0, flashValue = 0, nextThunder = 6, birdTimer = 5;
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function updateWeather(dt) {
+  const T = WEATHER[cur], k = Math.min(1, dt * 1.6);
+  blend.sky.top.lerp(new THREE.Color(T.sky.top), k);
+  blend.sky.mid.lerp(new THREE.Color(T.sky.mid), k);
+  blend.sky.bot.lerp(new THREE.Color(T.sky.bot), k);
+  blend.dawn.top.lerp(new THREE.Color(T.dawn.top), k);
+  blend.dawn.mid.lerp(new THREE.Color(T.dawn.mid), k);
+  blend.dawn.bot.lerp(new THREE.Color(T.dawn.bot), k);
+  blend.dawnSun.lerp(new THREE.Color(T.dawn.sunColor), k);
+  blend.daySun.lerp(new THREE.Color(T.sky.sunColor), k);
+  blend.sun.lerp(new THREE.Color(T.sky.sunColor), k);
+  blend.rain = lerp(blend.rain, T.rain, k);
+  blend.wind = lerp(blend.wind, T.wind, k);
+  blend.rough = lerp(blend.rough, T.groundRough, k);
+  blend.exposure = lerp(blend.exposure, T.exposure, k);
+  blend.sunIntensity = lerp(blend.sunIntensity, T.sunIntensity, k);
+  blend.hemi = lerp(blend.hemi, T.hemi, k);
+
+  skyUniforms.topColor.value.copy(blend.sky.top);
+  skyUniforms.midColor.value.copy(blend.sky.mid);
+  skyUniforms.botColor.value.copy(blend.sky.bot);
+  skyUniforms.sunColor.value.copy(blend.sun);
+  skyUniforms.sunPower.value = lerp(skyUniforms.sunPower.value, cur === 'sun' ? 0.65 : 0.14, k);
+  skyUniforms.flash.value = flashValue;
+
+  sun.intensity = blend.sunIntensity + flashValue * 3.2;
+  sun.color.copy(new THREE.Color(WEATHER[cur].sunColor));
+  hemi.intensity = blend.hemi;
+  scene.fog.color.lerp(new THREE.Color(WEATHER[cur].fog), k);
+  scene.fog.near = lerp(scene.fog.near, WEATHER[cur].fogNear, k);
+  scene.fog.far = lerp(scene.fog.far, WEATHER[cur].fogFar, k);
+  ground.material.roughness = blend.rough;
+  ground.material.metalness = lerp(ground.material.metalness, cur === 'sun' ? 0.02 : 0.22, k);
+  renderer.toneMappingExposure = blend.exposure;
+
+  /* 灯笼天黑时更亮 */
+  lanternMat.emissiveIntensity = lerp(lanternMat.emissiveIntensity, (cur === 'storm' || cur === 'rain') ? 1.1 : 0.5, k);
+  lampHeads.forEach(function (h) { h.material.emissiveIntensity = (cur === 'storm' || cur === 'rain') ? 1.2 : 0.4; });
+
+  /* 闪电 */
+  if (cur === 'storm') {
+    flashTimer -= dt;
+    if (flashTimer <= 0) { flashValue = 1; flashTimer = 0.16; nextThunder -= dt; }
+    if (flashValue > 0) flashValue = Math.max(0, flashValue - dt * 6.5);
+    nextThunder -= dt;
+    if (nextThunder <= 0) { thunderSound(); nextThunder = 5.5; }
+  } else {
+    flashValue = Math.max(0, flashValue - dt * 6);
+    nextThunder = 6;
+  }
+  if (cur === 'sun') {
+    birdTimer -= dt;
+    if (birdTimer <= 0) { birdSound(); birdTimer = 7; }
+  }
+  /* 音量 */
+  if (audio.ready) {
+    audio.rainGain.gain.value = lerp(audio.rainGain.gain.value, cur === 'sun' || cur === 'wind' ? 0.0 : (cur === 'rain' ? 0.16 : 0.26), k);
+    audio.windGain.gain.value = lerp(audio.windGain.gain.value, 0.02 + blend.wind * 0.16, k);
+  }
+}
+
+function updateRain(dt) {
+  const p = rainGeo.attributes.position.array;
+  const vis = blend.rain;
+  rain.material.opacity = vis * 0.55;
+  if (vis < 0.02) { rain.visible = false; return; }
+  rain.visible = true;
+  const speed = 26 + blend.wind * 16;
+  const slant = blend.wind * 5.5;
+  for (let i = 0; i < RAIN_N; i++) {
+    let y = rainSeed[i * 3 + 1] - (performance.now() * 0.001 * speed) % 40;
+    if (y < 0) y += 40;
+    const x = rainSeed[i * 3] + slant * (40 - y) * 0.12;
+    const z = rainSeed[i * 3 + 2];
+    const len = 1.1 + blend.wind * 0.6;
+    p[i * 6] = x; p[i * 6 + 1] = y; p[i * 6 + 2] = z;
+    p[i * 6 + 3] = x + slant * 0.08; p[i * 6 + 4] = y - len; p[i * 6 + 5] = z;
+  }
+  rainGeo.attributes.position.needsUpdate = true;
+  /* 涟漪 */
+  ripples.forEach(function (r) {
+    r.t += dt * (0.6 + blend.rain * 0.9);
+    if (r.t > 1) { r.t = 0; r.mesh.position.x = ((Math.sin(r.t * 91 + r.mesh.id) * 43758.5453) % 1 + 1) % 1 * 60 - 30; }
+    const s = 0.4 + r.t * 3.2;
+    r.mesh.scale.set(s, s, s);
+    r.mesh.material.opacity = (1 - r.t) * 0.45 * blend.rain;
+  });
+}
+
+function updateWind(dt, time) {
+  const amt = blend.wind;
+  trees.forEach(function (t, i) {
+    t.rotation.z = Math.sin(time * (1.1 + i * 0.13) + i) * 0.06 * amt;
+    t.rotation.x = Math.cos(time * (0.9 + i * 0.11) + i * 2) * 0.045 * amt;
+  });
+  canopy.rotation.z = Math.sin(time * 1.6) * 0.012 * amt;
+  /* 飘叶 */
+  const p = leafGeo.attributes.position.array;
+  leafMatP.opacity = amt * 0.9;
+  if (amt > 0.05) {
+    for (let i = 0; i < LEAF_N; i++) {
+      const ph = leafPhase[i];
+      p[i * 3] += (6 + 10 * amt) * dt;
+      if (p[i * 3] > 45) p[i * 3] = -45;
+      p[i * 3 + 1] += Math.sin(time * 2.2 + ph) * 0.9 * dt * amt;
+      if (p[i * 3 + 1] < 0.4) p[i * 3 + 1] = 6 + (ph % 4);
+      p[i * 3 + 2] += Math.cos(time * 1.7 + ph) * 2.2 * dt * amt;
+    }
+    leafGeo.attributes.position.needsUpdate = true;
+  }
+  leaves.visible = amt > 0.05;
+}
+
+/* 人的动作：晴天在广场打牌 / 雨天檐下 / 风天抱头 */
+function updatePeople(dt, time) {
+  const raining = cur === 'rain' || cur === 'storm';
+  const windy = cur === 'wind';
+  /* 牌桌位置：晴天在广场，雨天移到檐下 */
+  const targetZ = raining ? (D / 2 + 3.4) : 8.6;
+  const targetX = raining ? -1.6 : 0.6;
+  mahjongGroup.position.x = lerp(mahjongGroup.position.x, targetX, dt * 1.6);
+  mahjongGroup.position.z = lerp(mahjongGroup.position.z, targetZ, dt * 1.6);
+  mahjongGroup.rotation.y = lerp(mahjongGroup.rotation.y, raining ? 0.25 : -0.12, dt * 1.4);
+
+  /* 四位老人 */
+  mahjongSeats.forEach(function (s, i) {
+    const off = s.offset;
+    s.person.position.set(mahjongGroup.position.x + off[0], 0, mahjongGroup.position.z + off[1]);
+    s.person.rotation.y = Math.atan2(-off[0], -off[1]);
+    const L = s.person.userData.limbs;
+    /* 坐姿：屈膝 + 手臂在桌面上小幅动作（摸牌/出牌） */
+    L.legL.rotation.x = 1.35; L.legR.rotation.x = 1.35;
+    L.armL.rotation.x = -0.95 + Math.sin(time * 2.1 + i * 1.7) * 0.22;
+    L.armR.rotation.x = -0.95 + Math.sin(time * 1.7 + i * 2.4) * 0.22;
+    L.armL.rotation.z = 0.28; L.armR.rotation.z = -0.28;
+    s.person.userData.bodySwayT = time;
+  });
+
+  /* 走动的老人 */
+  const activeWalkers = raining ? umbWalkers : walkers;
+  walkers.forEach(function (w) { w.p.visible = showPeople && !raining; });
+  umbWalkers.forEach(function (w) { w.p.visible = showPeople && raining; });
+
+  activeWalkers.forEach(function (w, i) {
+    w.t += dt * w.speed * (raining ? 1.7 : 1);
+    if (w.t > 1) w.t -= 1;
+    const t = w.t;
+    let x, z, dir;
+    if (w.path === 'south') {
+      x = -14 + t * 30;
+      z = 19 + Math.sin(t * Math.PI * 2) * 2.4;
+      dir = Math.atan2(30, Math.cos(t * Math.PI * 2) * 2.4 * Math.PI * 2);
+    } else {
+      x = 20 - Math.sin(t * Math.PI * 2) * 3.2;
+      z = 4 + t * 26;
+      dir = Math.atan2(-Math.cos(t * Math.PI * 2) * 3.2 * Math.PI * 2, 26);
+    }
+    w.p.position.set(x, 0, z);
+    w.p.rotation.y = dir;
+    const L = w.p.userData.limbs;
+    const sp = raining ? 9 : (windy ? 5.5 : 4.2);
+    L.legL.rotation.x = Math.sin(time * sp + i) * 0.55;
+    L.legR.rotation.x = -Math.sin(time * sp + i) * 0.55;
+    L.armL.rotation.x = -Math.sin(time * sp + i) * 0.42;
+    L.armR.rotation.x = Math.sin(time * sp + i) * 0.42;
+    if (windy) { L.armR.rotation.z = -0.7; }   /* 风天举手护头 */
+    /* 轻微上下起伏 */
+    w.p.position.y = Math.abs(Math.sin(time * sp + i)) * 0.06;
+  });
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(0.05, clock.getDelta());
+  const time = clock.elapsedTime;
+  updateWeather(dt);
+  applyPhase();
+  updateRain(dt);
+  updateWind(dt, time);
+  if (showPeople) updatePeople(dt, time);
+  if (autoRotate) { cam.az += dt * 0.12; applyCamera(); }
+  /* 天气球轻微呼吸 */
+  orbs.forEach(function (o, i) {
+    const s = 16 + Math.sin(time * 1.4 + i * 1.1) * 0.6;
+    o.scale.set(s, s, 1);
+  });
+  renderer.render(scene, camera);
+}
+
+/* 藏掉加载提示 */
+document.getElementById('loading').style.display = 'none';
+/* 对外暴露（便于调试与自动化测试；隔离世界也能读到） */
+window.__demo = { get weather() { return cur; }, setWeather: setWeather, parts: parts, markers: markerGroup,
+  sun: sun, skyUniforms: skyUniforms, get timeOfDay() { return timeOfDay; },
+  pickAt: pickAt, showCard: showCard, hideCard: hideCard };
+animate();
+applyCamera();
+</script>
+</body>
+</html>
